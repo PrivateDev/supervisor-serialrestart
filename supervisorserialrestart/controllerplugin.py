@@ -22,18 +22,20 @@ class SerialRestartControllerPlugin(ControllerPluginBase):
 
     def _waitForListen(self, process):
         info = self.ctl.get_supervisor().getProcessInfo(process)
-        p = psutil.Process(info['pid'])
-
-        tries = 0
-        while tries < self.waitRetries:
-            connections = p.get_connections(kind="tcp")
-            if len(connections) > 0 and connections[0].status == 'LISTEN':
-                self.ctl.output('listen')
-                break
-            else:
-                self.ctl.output('Wait for listen ...')
-                time.sleep(1)
-            tries += 1
+        try:
+            p = psutil.Process(info['pid'])
+            tries = 0
+            while tries < self.waitRetries:
+                connections = p.get_connections(kind="tcp")
+                if len(connections) > 0 and connections[0].status == 'LISTEN':
+                    self.ctl.output('listen')
+                    break
+                else:
+                    self.ctl.output('Wait for listen ...')
+                    time.sleep(1)
+                tries += 1
+        except psutil.NoSuchProcess:
+            pass
 
     def do_serialrestart(self, arg):
         if not self.ctl.upcheck():
