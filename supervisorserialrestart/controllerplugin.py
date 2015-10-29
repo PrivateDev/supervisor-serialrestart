@@ -65,9 +65,7 @@ class SerialRestartControllerPlugin(ControllerPluginBase):
                     self.ctl.output('No such process %s' % (name, ))
 
         # do restart for each of them
-        for i in range(0, len(processes)):
-            process = processes[i]
-
+        for process in processes:
             self.ctl.onecmd('restart %s' % process)
 
             if self.waitForListen:
