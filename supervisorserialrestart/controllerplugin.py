@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from supervisor.supervisorctl import ControllerPluginBase
+import psutil
 import fnmatch
-
+import time
 
 class SerialRestartControllerPlugin(ControllerPluginBase):
     name = 'serialrestart'
@@ -9,6 +10,8 @@ class SerialRestartControllerPlugin(ControllerPluginBase):
     def __init__(self, controller, **config):
         self.ctl = controller
         self.match_group = bool(int(config.get('match_group', '0')))
+        self.waitForListen = bool(int(config.get('wait_for_listen', '0')))
+        self.waitRetries = int(config.get('wait_for_listen_retries', '10'))
 
     def _procrepr(self, process):
         template = '%(group)s:%(name)s'
@@ -16,6 +19,21 @@ class SerialRestartControllerPlugin(ControllerPluginBase):
             return process['name']
         else:
             return template % process
+
+    def _waitForListen(self, process):
+        info = self.ctl.get_supervisor().getProcessInfo(process)
+        p = psutil.Process(info['pid'])
+
+        tries = 0
+        while tries < self.waitRetries:
+            connections = p.get_connections(kind="tcp")
+            if len(connections) > 0 and connections[0].status == 'LISTEN':
+                self.ctl.output('listen')
+                break
+            else:
+                self.ctl.output('Wait for listen ...')
+                time.sleep(1)
+            tries += 1
 
     def do_serialrestart(self, arg):
         if not self.ctl.upcheck():
@@ -33,6 +51,7 @@ class SerialRestartControllerPlugin(ControllerPluginBase):
         processes = set()
 
         allprocesses = [self._procrepr(p) for p in supervisor.getAllProcessInfo()]
+
         if 'all' in names:
             processes = allprocesses
         else:
@@ -44,8 +63,13 @@ class SerialRestartControllerPlugin(ControllerPluginBase):
                     self.ctl.output('No such process %s' % (name, ))
 
         # do restart for each of them
-        for process in processes:
+        for i in range(0, len(processes)):
+            process = processes[i]
+
             self.ctl.onecmd('restart %s' % process)
+
+            if self.waitForListen:
+                self._waitForListen(process)
 
     def help_serialrestart(self):
         self.ctl.output("serialrestart <name>\t\tRestart a process")
